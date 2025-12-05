@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodIQ POS System</title>
+   
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+   
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .theme-transition { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+       
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { orange: '#f97316', emerald: '#10b981' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 h-screen w-screen overflow-hidden relative p-4 flex items-center justify-center">
+
+    <div id="toast-container" class="absolute top-6 left-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <div class="absolute top-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-orange-200/40 blur-[100px] -z-10"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-emerald-200/40 blur-[120px] -z-10"></div>
+
+    <div class="relative z-10 w-full h-full max-w-[1400px] bg-white rounded-3xl shadow-2xl shadow-slate-200/50 flex flex-col overflow-hidden">
+       
+        <header class="flex items-center justify-between px-8 py-5 border-b border-slate-100 bg-white shrink-0">
+            <div class="flex items-center gap-5">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-orange text-white shadow-md">
+                        <i data-lucide="utensils-crossed" class="w-6 h-6"></i>
+                    </div>
+                    <span class="text-2xl font-black text-slate-800 tracking-tight">FoodIQ</span>
+                </div>
+                <div class="h-8 w-px bg-slate-200"></div>
+                <span class="text-xl font-bold text-slate-400 uppercase tracking-wide" id="page-context">Menu</span>
+            </div>
+
+            <div class="flex items-center gap-6">
+                <button onclick="resetOrder()" class="flex items-center gap-2 bg-brand-orange text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:bg-orange-600 theme-transition active:scale-95">
+                    <i data-lucide="plus" class="w-4 h-4"></i> NEW ORDER
+                </button>
+                <div class="flex items-center gap-4 border-l border-slate-200 pl-6">
+                    <div class="text-right mr-2 hidden md:block">
+                        <div id="clock-time" class="text-sm font-bold text-slate-800">12:00 PM</div>
+                    </div>
+                    <button class="text-slate-400 hover:text-slate-600 relative">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                        <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+           
+            <aside class="w-64 border-r border-slate-100 flex flex-col bg-white">
+                <div class="p-4 border-b border-slate-100">
+                    <div class="group flex items-center rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-orange">
+                        <i data-lucide="search" class="mr-3 text-slate-400 w-5 h-5"></i>
+                        <input type="text" id="search-input" placeholder="Search item..." class="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none">
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto no-scrollbar py-4" id="sidebar-nav">
+                    </div>
+            </aside>
+
+            <main class="flex-1 bg-slate-50/50 p-6 overflow-y-auto no-scrollbar" id="main-content">
+                </main>
+
+            <aside class="w-[400px] border-l border-slate-100 flex flex-col bg-white">
+                <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white">
+                    <h2 class="text-xl font-bold text-slate-800">Your Cart</h2>
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 flex items-center gap-2">
+                        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Order ID</span>
+                        <span class="text-sm font-bold text-slate-800 leading-none">#<span id="order-id">8821</span></span>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-2 bg-slate-50/30" id="cart-container">
+                    </div>
+
+                <div class="mt-auto border-t border-slate-100 bg-white p-6 space-y-5 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input type="checkbox" class="w-4 h-4 rounded border-slate-300 text-brand-orange focus:ring-brand-orange">
+                            <span class="text-sm font-medium text-slate-600 group-hover:text-slate-800">Complimentary</span>
+                        </label>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-sm font-semibold text-slate-500">Total:</span>
+                            <span class="text-3xl font-black text-slate-900">₹ <span id="grand-total">0</span></span>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2" id="payment-modes">
+                        <label class="flex-1 flex items-center justify-center gap-2 bg-white px-3 py-3 rounded-xl border border-brand-orange shadow-sm cursor-pointer text-brand-orange font-bold transition-all relative overflow-hidden" onclick="selectPayment(this)">
+                            <div class="absolute inset-0 bg-brand-orange/10"></div>
+                            <span class="text-sm z-10">Cash</span>
+                        </label>
+                        <label class="flex-1 flex items-center justify-center gap-2 bg-white px-3 py-3 rounded-xl border border-slate-200 shadow-sm cursor-pointer text-slate-600 font-medium hover:bg-slate-50 transition-all" onclick="selectPayment(this)">
+                            <span class="text-sm">UPI</span>
+                        </label>
+                        <label class="flex-1 flex items-center justify-center gap-2 bg-white px-3 py-3 rounded-xl border border-slate-200 shadow-sm cursor-pointer text-slate-600 font-medium hover:bg-slate-50 transition-all" onclick="selectPayment(this)">
+                            <span class="text-sm">Card</span>
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-3 pt-2">
+                        <button onclick="handleAction('Saved')" class="col-span-1 py-4 rounded-xl border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center">
+                            <i data-lucide="save" class="w-5 h-5"></i>
+                        </button>
+                        <button onclick="handleAction('Receipt Printed')" class="col-span-1 py-4 rounded-xl border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center">
+                            <i data-lucide="printer" class="w-5 h-5"></i>
+                        </button>
+                        <button onclick="handleAction('KOT Sent to Kitchen')" class="col-span-2 py-4 rounded-xl bg-brand-orange text-white font-bold text-sm hover:bg-orange-600 shadow-lg shadow-orange-200 active:scale-95 transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="chef-hat" class="w-5 h-5"></i> PRINT KOT
+                        </button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        const menuItems = [
+            // BREAKFAST (25 Items)
+            { id: 101, name: "Vada Pav", price: 20, type: "breakfast" }, { id: 102, name: "Samosa Pav", price: 22, type: "breakfast" },
+            { id: 103, name: "Kanda Poha", price: 25, type: "breakfast" }, { id: 104, name: "Upma", price: 25, type: "breakfast" },
+            { id: 105, name: "Sheera", price: 30, type: "breakfast" }, { id: 106, name: "Idli Sambar", price: 40, type: "breakfast" },
+            { id: 107, name: "Medu Vada", price: 45, type: "breakfast" }, { id: 108, name: "Misal Pav", price: 60, type: "breakfast" },
+            { id: 109, name: "Usal Pav", price: 50, type: "breakfast" }, { id: 110, name: "Batata Vada", price: 20, type: "breakfast" },
+            { id: 111, name: "Sabudana Vada", price: 45, type: "breakfast" }, { id: 112, name: "Sabudana Khichdi", price: 50, type: "breakfast" },
+            { id: 113, name: "Bun Maska", price: 30, type: "breakfast" }, { id: 114, name: "Masala Dosa", price: 70, type: "breakfast" },
+            { id: 115, name: "Sada Dosa", price: 50, type: "breakfast" }, { id: 116, name: "Mysore Masala", price: 80, type: "breakfast" },
+            { id: 117, name: "Uttapam", price: 70, type: "breakfast" }, { id: 118, name: "Egg Bhurji Pav", price: 70, type: "breakfast" },
+            { id: 119, name: "Omelette Pav", price: 60, type: "breakfast" }, { id: 120, name: "Bread Pakoda", price: 25, type: "breakfast" },
+            { id: 121, name: "Toast Sandwich", price: 50, type: "breakfast" }, { id: 122, name: "Veg Sandwich", price: 40, type: "breakfast" },
+            { id: 123, name: "Cheese Sandwich", price: 60, type: "breakfast" }, { id: 124, name: "Maggi", price: 40, type: "breakfast" },
+            { id: 125, name: "Cutting Chai", price: 15, type: "breakfast" },
+            // LUNCH (25 Items)
+            { id: 201, name: "Veg Thali", price: 100, type: "lunch" }, { id: 202, name: "Chicken Thali", price: 150, type: "lunch" },
+            { id: 203, name: "Mini Meal", price: 80, type: "lunch" }, { id: 204, name: "Dal Khichdi", price: 90, type: "lunch" },
+            { id: 205, name: "Rajma Chawal", price: 100, type: "lunch" }, { id: 206, name: "Chole Bhature", price: 120, type: "lunch" },
+            { id: 207, name: "Veg Biryani", price: 120, type: "lunch" }, { id: 208, name: "Chicken Biryani", price: 160, type: "lunch" },
+            { id: 209, name: "Egg Biryani", price: 130, type: "lunch" }, { id: 210, name: "Fried Rice", price: 100, type: "lunch" },
+            { id: 211, name: "Schezwan Rice", price: 110, type: "lunch" }, { id: 212, name: "Hakka Noodles", price: 100, type: "lunch" },
+            { id: 213, name: "Triple Rice", price: 150, type: "lunch" }, { id: 214, name: "Manchurian Rice", price: 110, type: "lunch" },
+            { id: 215, name: "Paneer Chilli", price: 130, type: "lunch" }, { id: 216, name: "Chicken Chilli", price: 150, type: "lunch" },
+            { id: 217, name: "Puri Bhaji", price: 80, type: "lunch" }, { id: 218, name: "Chapati Bhaji", price: 60, type: "lunch" },
+            { id: 219, name: "Aloo Paratha", price: 70, type: "lunch" }, { id: 220, name: "Paneer Paratha", price: 90, type: "lunch" },
+            { id: 221, name: "Curd Rice", price: 80, type: "lunch" }, { id: 222, name: "Chicken Curry", price: 140, type: "lunch" },
+            { id: 223, name: "Egg Curry", price: 110, type: "lunch" }, { id: 224, name: "Veg Kadai", price: 120, type: "lunch" },
+            { id: 225, name: "Masala Taak", price: 20, type: "lunch" },
+            // DINNER (25 Items)
+            { id: 301, name: "Pav Bhaji", price: 100, type: "dinner" }, { id: 302, name: "Tawa Pulao", price: 110, type: "dinner" },
+            { id: 303, name: "Masala Pav", price: 50, type: "dinner" }, { id: 304, name: "Veg Frankie", price: 60, type: "dinner" },
+            { id: 305, name: "Chicken Frankie", price: 90, type: "dinner" }, { id: 306, name: "Cheese Frankie", price: 80, type: "dinner" },
+            { id: 307, name: "Paneer Frankie", price: 80, type: "dinner" }, { id: 308, name: "Veg Burger", price: 70, type: "dinner" },
+            { id: 309, name: "Chicken Burger", price: 90, type: "dinner" }, { id: 310, name: "Veg Pizza", price: 120, type: "dinner" },
+            { id: 311, name: "Chicken Pizza", price: 150, type: "dinner" }, { id: 312, name: "Red Pasta", price: 130, type: "dinner" },
+            { id: 313, name: "White Pasta", price: 130, type: "dinner" }, { id: 314, name: "Manchow Soup", price: 80, type: "dinner" },
+            { id: 315, name: "Corn Soup", price: 80, type: "dinner" }, { id: 316, name: "Chinese Bhel", price: 70, type: "dinner" },
+            { id: 317, name: "Sev Puri", price: 50, type: "dinner" }, { id: 318, name: "Dahi Puri", price: 60, type: "dinner" },
+            { id: 319, name: "Ragda Pattice", price: 60, type: "dinner" }, { id: 320, name: "Samosa Chaat", price: 60, type: "dinner" },
+            { id: 321, name: "Chicken Lollipop", price: 140, type: "dinner" }, { id: 322, name: "Veg Crispy", price: 110, type: "dinner" },
+            { id: 323, name: "Cold Coffee", price: 60, type: "dinner" }, { id: 324, name: "Milkshake", price: 80, type: "dinner" },
+            { id: 325, name: "Ice Cream", price: 40, type: "dinner" }
+        ];
+
+        // --- STATE ---
+        let cart = [];
+        let activeTab = 'breakfast';
+        let searchQuery = '';
+        let openSections = { category: true, statistics: false };
+
+        // --- DOM ELEMENTS ---
+        const sidebarNav = document.getElementById('sidebar-nav');
+        const mainContent = document.getElementById('main-content');
+        const cartContainer = document.getElementById('cart-container');
+        const grandTotalEl = document.getElementById('grand-total');
+        const searchInput = document.getElementById('search-input');
+        const pageContext = document.getElementById('page-context');
+
+        // --- NAVIGATION STRUCTURE ---
+        const navStructure = {
+            category: {
+                label: "CATEGORY",
+                items: [
+                    { id: 'breakfast', label: "BREAKFAST", icon: "coffee" },
+                    { id: 'lunch', label: "LUNCH", icon: "sun" },
+                    { id: 'dinner', label: "DINNER", icon: "moon" }
+                ]
+            },
+            statistics: {
+                label: "STATISTICS",
+                items: [
+                    { id: 'business', label: "BUSINESS", icon: "trending-up" },
+                    { id: 'wastage', label: "WASTAGE", icon: "trash-2" }
+                ]
+            }
+        };
+
+        function init() {
+            lucide.createIcons();
+            renderSidebar();
+            renderMainContent();
+            renderCart();
+            updateClock();
+            setInterval(updateClock, 60000);
+        }
+
+        function toggleSection(key) {
+            openSections[key] = !openSections[key];
+            renderSidebar();
+        }
+
+        // --- UPDATED setTab FUNCTION FOR REDIRECTS ---
+        function setTab(id) {
+            // REDIRECT LOGIC FOR STATISTICS
+            if (id === 'business') {
+                window.location.href = 'business.html';
+                return;
+            }
+            if (id === 'wastage') {
+                window.location.href = 'wastage.html';
+                return;
+            }
+
+            // Standard logic for MENU tabs
+            activeTab = id;
+            searchQuery = '';
+            searchInput.value = '';
+            renderSidebar();
+            renderMainContent();
+        }
+
+        function renderSidebar() {
+            let html = '';
+            for (const [key, section] of Object.entries(navStructure)) {
+                const isOpen = openSections[key];
+                const chevron = isOpen ? 'chevron-down' : 'chevron-right';
+                const parentActive = isOpen ? 'text-slate-800' : 'text-slate-400';
+
+                html += `<div class="mb-2">
+                            <button onclick="toggleSection('${key}')" class="w-full flex items-center justify-between px-6 py-3 text-xs font-bold ${parentActive} uppercase tracking-widest hover:bg-slate-50 theme-transition group">
+                                <span>${section.label}</span>
+                                <i data-lucide="${chevron}" class="w-4 h-4 text-slate-300 group-hover:text-brand-orange transition-colors"></i>
+                            </button>`;
+               
+                if (isOpen) {
+                    html += `<ul class="space-y-1 mb-4 animate-fade-in">`;
+                    section.items.forEach(item => {
+                        const isActive = activeTab === item.id;
+                        const activeClasses = 'border-l-4 border-brand-orange text-brand-orange bg-brand-orange/5 font-bold';
+                        const inactiveClasses = 'border-l-4 border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium';
+                       
+                        html += `<li>
+                                    <button onclick="setTab('${item.id}')" class="w-full flex items-center gap-3 px-6 py-3 text-sm theme-transition ${isActive ? activeClasses : inactiveClasses}">
+                                        <i data-lucide="${item.icon}" class="w-4 h-4"></i>
+                                        ${item.label}
+                                    </button>
+                                 </li>`;
+                    });
+                    html += `</ul>`;
+                }
+                html += `</div>`;
+            }
+            sidebarNav.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function renderMainContent() {
+            renderMenuGrid();
+        }
+
+        function renderMenuGrid() {
+            pageContext.innerText = activeTab.toUpperCase();
+           
+            const filtered = menuItems.filter(item => {
+                if (searchQuery.length > 0) return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+                return item.type === activeTab;
+            });
+
+            if (filtered.length === 0) {
+                mainContent.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-slate-400"><i data-lucide="search-x" class="w-12 h-12 mb-2 opacity-50"></i><p>No items found.</p></div>`;
+            } else {
+                const gridHtml = filtered.map((item, index) => `
+                    <button onclick="addToCart(${item.id})" class="animate-fade-in bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center h-28 text-center hover:shadow-md hover:border-brand-orange/30 active:scale-[0.98] theme-transition group relative overflow-hidden" style="animation-delay: ${index * 0.02}s">
+                        <span class="font-semibold text-slate-800 text-sm group-hover:text-brand-orange transition-colors">${item.name}</span>
+                        <span class="text-xs text-slate-500 mt-1">₹ ${item.price}</span>
+                        <div class="absolute inset-0 bg-brand-orange/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                        <div class="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+                            <div class="bg-brand-orange text-white rounded-full p-1 shadow-md">
+                                <i data-lucide="plus" class="w-3 h-3"></i>
+                            </div>
+                        </div>
+                    </button>`).join('');
+                mainContent.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">${gridHtml}</div>`;
+            }
+            lucide.createIcons();
+        }
+
+        function addToCart(id) {
+            const item = menuItems.find(i => i.id === id);
+            const existing = cart.find(i => i.id === id);
+            if (existing) { existing.qty++; } else { cart.push({ ...item, qty: 1 }); }
+            renderCart();
+        }
+
+        function renderCart() {
+            if (cart.length === 0) {
+                cartContainer.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-slate-400 opacity-60"><i data-lucide="shopping-bag" class="w-12 h-12 mb-2 stroke-[1]"></i><span class="text-sm">Cart is empty</span></div>`;
+                grandTotalEl.innerText = "0";
+            } else {
+                let total = 0;
+                cartContainer.innerHTML = cart.map(item => {
+                    const itemTotal = item.price * item.qty;
+                    total += itemTotal;
+                    return `
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm group hover:border-brand-orange/30 theme-transition animate-fade-in mb-2">
+                        <div class="flex flex-col"><span class="font-bold text-slate-800 text-sm">${item.name}</span><span class="text-[10px] text-slate-400">₹ ${item.price} x ${item.qty}</span></div>
+                        <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-2 bg-slate-50 rounded-lg border border-slate-200 p-1">
+                                <button onclick="updateQty(${item.id}, -1)" class="w-6 h-6 flex items-center justify-center bg-white rounded text-slate-400 hover:text-red-500 hover:bg-red-50 theme-transition shadow-sm"><i data-lucide="minus" class="w-3 h-3"></i></button>
+                                <span class="font-bold text-sm w-4 text-center text-slate-700">${item.qty}</span>
+                                <button onclick="updateQty(${item.id}, 1)" class="w-6 h-6 flex items-center justify-center bg-white rounded text-slate-400 hover:text-green-500 hover:bg-green-50 theme-transition shadow-sm"><i data-lucide="plus" class="w-3 h-3"></i></button>
+                            </div>
+                            <span class="font-bold text-slate-800 w-12 text-right">₹ ${itemTotal}</span>
+                        </div>
+                    </div>`;
+                }).join('');
+                grandTotalEl.innerText = total;
+            }
+            lucide.createIcons();
+        }
+
+        function updateQty(id, change) {
+            const itemIndex = cart.findIndex(i => i.id === id);
+            if (itemIndex === -1) return;
+            cart[itemIndex].qty += change;
+            if (cart[itemIndex].qty <= 0) cart.splice(itemIndex, 1);
+            renderCart();
+        }
+
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            renderMainContent();
+        });
+
+        function selectPayment(element) {
+            const parent = document.getElementById('payment-modes');
+            Array.from(parent.children).forEach(child => {
+                child.className = "flex-1 flex items-center justify-center gap-2 bg-white px-3 py-3 rounded-xl border border-slate-200 shadow-sm cursor-pointer text-slate-600 font-medium hover:bg-slate-50 transition-all";
+                if(child.querySelector('.absolute')) child.querySelector('.absolute').remove();
+            });
+            element.className = "flex-1 flex items-center justify-center gap-2 bg-white px-3 py-3 rounded-xl border border-brand-orange shadow-sm cursor-pointer text-brand-orange font-bold transition-all relative overflow-hidden";
+            const bg = document.createElement('div');
+            bg.className = "absolute inset-0 bg-brand-orange/10";
+            element.prepend(bg);
+        }
+
+        function resetOrder() {
+            if(cart.length > 0 && !confirm("Clear current order?")) return;
+            cart = [];
+            renderCart();
+            document.getElementById('order-id').innerText = Math.floor(Math.random() * 9000) + 1000;
+            showToast("New Order Started");
+        }
+
+        function handleAction(action) {
+            if (cart.length === 0) { showToast("Cart is empty!", true); return; }
+            showToast(`Order ${action} Successfully`);
+        }
+
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `px-4 py-3 rounded-xl shadow-lg font-medium text-sm flex items-center gap-2 transform transition-all duration-300 translate-x-[-100%] ${isError ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}`;
+            toast.innerHTML = `<i data-lucide="${isError ? 'alert-circle' : 'check-circle'}" class="w-4 h-4"></i> ${message}`;
+            container.appendChild(toast);
+            lucide.createIcons();
+            requestAnimationFrame(() => toast.classList.remove('translate-x-[-100%]'));
+            setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-[-10px]'); setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock-time').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>FoodIQ — Canteen Statistics</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--accent:#ff7a20;--muted:#6b7280;--card:#fff;--shadow:0 10px 30px rgba(20,30,60,0.06);}
+    body{font-family:"Poppins",system-ui,-apple-system,Segoe UI,Roboto,Arial;background:linear-gradient(135deg,#fffaf7 0%,#eefcf6 100%);margin:0;color:#0f172a}
+    .app{max-width:1200px;margin:28px auto;padding:28px}
+    .top{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+    .logo{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;background:linear-gradient(90deg,rgba(255,122,32,0.12),rgba(255,122,32,0.06));box-shadow:var(--shadow)}
+    .logo .icon{width:36px;height:36px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+    .hero{background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0.9));padding:18px;border-radius:22px;box-shadow:var(--shadow)}
+    .grid{display:grid;grid-template-columns:320px 1fr;gap:18px;margin-top:18px}
+    .card{background:var(--card);padding:16px;border-radius:14px;box-shadow:0 6px 18px rgba(22,32,64,0.06)}
+    .overview-title{font-weight:700;margin-bottom:8px}
+    .stat-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed #f0f3f5}
+    .muted{color:var(--muted);font-size:13px}
+    button.primary{background:var(--accent);color:#fff;padding:8px 12px;border-radius:12px;border:none;cursor:pointer;box-shadow:0 8px 18px rgba(255,122,32,0.12)}
+    canvas{display:block}
+    @media(max-width:980px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top">
+      <div class="logo"><div class="icon">🍽</div><div style="font-weight:700">FoodIQ</div></div>
+      <div style="flex:1"></div>
+      <div class="muted">Canteen Dashboard</div>
+    </div>
+
+    <div class="hero">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h1 style="margin:0">Canteen Waste — Statistics</h1><div class="muted">Visualize surplus, top-wasted dishes and thresholds</div></div>
+        <div style="display:flex;gap:8px;align-items:center"><button class="primary" id="refreshBtn">Refresh</button><div class="muted" id="yearBox"></div></div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <div class="card">
+            <div class="overview-title">Overview</div>
+            <div id="overviewArea">
+              <div class="stat-row"><div class="muted">Prepared</div><div id="prepared">—</div></div>
+              <div class="stat-row"><div class="muted">Consumed</div><div id="consumed">—</div></div>
+              <div class="stat-row"><div class="muted">Surplus</div><div id="surplus">—</div></div>
+              <div class="stat-row"><div class="muted">Avg consumption rate</div><div id="consrate">—</div></div>
+            </div>
+
+            <div style="margin-top:14px" class="overview-title">Threshold check</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="thresholdDate" type="date" />
+              <input id="thresholdQty" type="number" placeholder="qty" />
+              <button class="primary" id="checkBtn">Check</button>
+            </div>
+            <div id="thresholdResult" class="muted" style="margin-top:8px">Enter date & threshold then press Check.</div>
+          </div>
+
+          <div style="height:12px"></div>
+
+          <div class="card">
+            <div style="font-weight:700;margin-bottom:8px">Quick actions</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="primary" id="predBtn">Show predictions</button>
+              <button class="primary" id="exportBtn" style="background:#10b981">Export CSV</button>
+            </div>
+            <div class="muted" style="margin-top:10px">Pro tip: use predictions to auto-trigger NGO pickups.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:700">Daily Surplus (last 60 days)</div>
+              <div class="muted">Trend vs actual</div>
+            </div>
+
+            <div style="display:flex;gap:14px;margin-top:12px">
+              <div style="flex:1">
+                <canvas id="dailyChart" height="160"></canvas>
+              </div>
+              <div style="width:320px">
+                <div style="font-weight:700;margin-bottom:6px">Top wasted dishes</div>
+                <canvas id="dishChart" height="180"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:16px"></div>
+          <div class="card">
+            <div style="font-weight:700">Detailed daily stats <span class="muted" style="float:right">Click row to inspect</span></div>
+            <div id="tableWrap" style="margin-top:12px;max-height:240px;overflow:auto" class="muted">No data available.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+const API = `${window.location.protocol}//${window.location.hostname}:5000/api`;
+document.getElementById("yearBox").innerText = new Date().getFullYear();
+
+async function apiGet(path, params={}) {
+  const url = `${API}${path}`;
+  const res = await axios.get(url, { params });
+  return res.data;
+}
+
+let dailyChart, dishChart;
+
+function renderOverview(o){
+  if(!o){ document.getElementById("overviewArea").innerHTML = '<div class="muted" style="color:#b91c1c">Error fetching API — is Flask running?</div>'; return; }
+  document.getElementById("prepared").innerText = o.total_prepared ?? "—";
+  document.getElementById("consumed").innerText = o.total_consumed ?? "—";
+  document.getElementById("surplus").innerText = o.total_surplus ?? "—";
+  document.getElementById("consrate").innerText = (o.avg_consumption_rate_percent ?? "—") + "%";
+}
+
+function drawDailyChart(data){
+  const labels = data.map(r=>r.date);
+  const values = data.map(r=>Number(r.surplus||0));
+  const ctx = document.getElementById("dailyChart").getContext("2d");
+  if(dailyChart) dailyChart.destroy();
+  dailyChart = new Chart(ctx, {
+    type:"line",
+    data:{ labels, datasets:[{ label:"Surplus", data:values, borderColor:'#ff7a20', backgroundColor:'rgba(255,122,32,0.08)', fill:true, tension:0.2 }]},
+    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }
+  });
+}
+
+function drawDishChart(dishes){
+  const labels = dishes.map(d=>d.dish_name);
+  const values = dishes.map(d=>Number(d.waste_rate_percent ?? 0));
+  const ctx = document.getElementById("dishChart").getContext("2d");
+  if(dishChart) dishChart.destroy();
+  dishChart = new Chart(ctx, {
+    type:"bar",
+    data:{ labels, datasets:[{ label:"Waste %", data:values, backgroundColor:'rgba(255,122,32,0.9)' }]},
+    options:{ indexAxis:'y', plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true } } }
+  });
+}
+
+function renderDailyTable(daily){
+  const wrap = document.getElementById("tableWrap");
+  if(!daily || !daily.length){ wrap.innerHTML = '<div class="muted">No daily records found.</div>'; return; }
+  const rows = daily.slice().reverse().map(r=>`
+    <div style="display:flex;justify-content:space-between;padding:8px 10px;margin-bottom:8px;border-radius:10px;background:#fbfbfb;cursor:pointer" onclick="rowClick('${r.date}')">
+      <div><div style="font-weight:600">${r.date}</div><div class="muted" style="font-size:13px">Prepared ${r.quantity_prepared} • Consumed ${r.quantity_consumed}</div></div>
+      <div style="text-align:right"><div style="font-weight:700">${r.surplus}</div><div class="muted" style="font-size:13px">surplus</div></div>
+    </div>
+  `).join("");
+  wrap.innerHTML = rows;
+}
+
+window.rowClick = function(date){
+  axios.get(`${API}/threshold`, { params:{ date, threshold:0 } }).then(r=>{
+    const arr = r.data || [];
+    if(!arr.length){ alert("No dishes for " + date); return; }
+    alert("Dishes on " + date + ":\n\n" + arr.map(a=>`${a.dish_name} — surplus ${a.surplus}`).join("\n"));
+  }).catch(()=>alert("Error fetching dish details."));
+};
+
+async function loadAndRender(){
+  try{
+    const [ov, daily, dishes] = await Promise.all([apiGet("/overall"), apiGet("/daily"), apiGet("/dishes?top=8")]);
+    renderOverview(ov);
+    drawDailyChart(daily.slice(-60));
+    drawDishChart(dishes);
+    renderDailyTable(daily);
+  }catch(e){
+    console.error(e);
+    document.getElementById("overviewArea").innerHTML = '<div class="muted" style="color:#b91c1c">Error fetching API — is Flask running?</div>';
+    document.getElementById("tableWrap").innerHTML = '<div class="muted">No data available.</div>';
+  }
+}
+
+document.getElementById("checkBtn").addEventListener("click", async ()=>{
+  const date = document.getElementById("thresholdDate").value;
+  const qty = document.getElementById("thresholdQty").value || 0;
+  const resEl = document.getElementById("thresholdResult");
+  if(!date){ resEl.innerText = "Pick a date first."; return; }
+  resEl.innerText = "Checking…";
+  try{
+    const r = await axios.get(`${API}/threshold`, { params:{ date, threshold: qty }});
+    const arr = r.data;
+    if(!arr || !arr.length) resEl.innerText = `No dishes with surplus ≥ ${qty} on ${date}.`;
+    else resEl.innerText = arr.map(x=>`${x.dish_name} — ${x.surplus}`).join(" · ");
+  }catch(e){ resEl.innerText = "Error checking threshold."; }
+});
+
+document.getElementById("refreshBtn").addEventListener("click", loadAndRender);
+document.getElementById("exportBtn").addEventListener("click", async ()=>{
+  try{
+    const daily = await apiGet("/daily");
+    const keys = Object.keys(daily[0]||{});
+    const csv = [keys.join(",")].concat(daily.map(r=>keys.map(k=>JSON.stringify(r[k] ?? "")).join(","))).join("\n");
+    const blob = new Blob([csv], { type:'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "daily_stats.csv"; a.click(); URL.revokeObjectURL(url);
+  }catch(e){ alert("Export failed"); }
+});
+
+loadAndRender();
+
+</script>
+</body>
+</html>

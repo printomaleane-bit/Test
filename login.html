@@ -6,28 +6,21 @@
     <title>FoodIQ Login</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://unpkg.com/lucide@latest"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
         body { font-family: 'Inter', sans-serif; }
-        
-        /* Smooth transition for color swaps */
-        .theme-transition {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        .theme-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
 
     <script>
-        // Configure Tailwind to recognize our custom brand colors if needed
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        canteen: '#f97316', // Orange-500
-                        ngo: '#10b981',     // Emerald-500
+                        canteen: '#f97316', 
+                        ngo: '#10b981',      
                     }
                 }
             }
@@ -62,7 +55,7 @@
             </button>
         </div>
 
-        <form class="space-y-5" onsubmit="event.preventDefault();">
+        <form class="space-y-5" onsubmit="handleLogin(event)">
             
             <div class="space-y-1.5">
                 <label class="text-sm font-semibold text-slate-900">Email</label>
@@ -82,12 +75,17 @@
                     </button>
                 </div>
                 
+                <div id="error-msg" class="hidden flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 p-2 rounded-lg border border-red-100 animate-pulse">
+                    <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                    <span>Incorrect password. Please try again.</span>
+                </div>
+
                 <div class="flex justify-end pt-1">
                     <a href="#" id="link-forgot" class="text-xs font-medium text-orange-500 hover:opacity-80 theme-transition">Forgot password?</a>
                 </div>
             </div>
 
-            <button id="btn-submit" class="w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] bg-orange-500 hover:bg-orange-600 shadow-orange-200 theme-transition">
+            <button type="submit" id="btn-submit" class="w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] bg-orange-500 hover:bg-orange-600 shadow-orange-200 theme-transition">
                 Sign In
             </button>
         </form>
@@ -99,13 +97,38 @@
     </div>
 
     <script>
-        // Initialize Icons
         lucide.createIcons();
-
-        // State Tracking
         let currentRole = 'canteen';
 
-        // Elements
+        // --- NEW LOGIN LOGIC ---
+        function handleLogin(event) {
+            // 1. Stop the form from submitting to a server (Prevents 405 Error)
+            event.preventDefault();
+
+            const passwordInput = document.getElementById('password-input');
+            const errorMsg = document.getElementById('error-msg');
+            const passwordContainer = document.getElementById('password-container');
+
+            // 2. SET YOUR PASSWORD HERE
+            const correctPassword = "admin";
+
+            if (passwordInput.value === correctPassword) {
+                // Success: Redirect
+                window.location.href = "Billing.html";
+            } else {
+                // Failure: Show Error
+                errorMsg.classList.remove('hidden');
+                passwordContainer.classList.add('ring-2', 'ring-red-500', 'bg-red-50');
+                lucide.createIcons(); // Refresh icons for the error message
+                
+                // Reset style after 2 seconds
+                setTimeout(() => {
+                    passwordContainer.classList.remove('ring-2', 'ring-red-500', 'bg-red-50');
+                }, 2000);
+            }
+        }
+
+        // --- EXISTING UI LOGIC ---
         const btnCanteen = document.getElementById('btn-canteen');
         const btnNgo = document.getElementById('btn-ngo');
         const logoBg = document.getElementById('logo-bg');
@@ -121,41 +144,22 @@
             currentRole = role;
 
             if (role === 'canteen') {
-                // Activate Canteen Tab
                 btnCanteen.className = "flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all duration-300 bg-orange-500 text-white shadow-md";
                 btnNgo.className = "flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all duration-300 text-slate-500 hover:text-slate-700";
-                
-                // Update Colors to Orange
                 logoBg.classList.replace('bg-emerald-500', 'bg-orange-500');
-                
-                // Update Focus Rings
                 emailContainer.classList.replace('focus-within:ring-emerald-500', 'focus-within:ring-orange-500');
                 passContainer.classList.replace('focus-within:ring-emerald-500', 'focus-within:ring-orange-500');
-                
-                // Update Links
                 linkForgot.classList.replace('text-emerald-500', 'text-orange-500');
                 linkSignup.classList.replace('text-emerald-500', 'text-orange-500');
-                
-                // Update Submit Button
                 btnSubmit.className = "w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] bg-orange-500 hover:bg-orange-600 shadow-orange-200 theme-transition";
-
             } else {
-                // Activate NGO Tab
                 btnNgo.className = "flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all duration-300 bg-emerald-500 text-white shadow-md";
                 btnCanteen.className = "flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all duration-300 text-slate-500 hover:text-slate-700";
-                
-                // Update Colors to Green (Emerald)
                 logoBg.classList.replace('bg-orange-500', 'bg-emerald-500');
-                
-                // Update Focus Rings
                 emailContainer.classList.replace('focus-within:ring-orange-500', 'focus-within:ring-emerald-500');
                 passContainer.classList.replace('focus-within:ring-orange-500', 'focus-within:ring-emerald-500');
-                
-                // Update Links
                 linkForgot.classList.replace('text-orange-500', 'text-emerald-500');
                 linkSignup.classList.replace('text-orange-500', 'text-emerald-500');
-                
-                // Update Submit Button
                 btnSubmit.className = "w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 theme-transition";
             }
         }
@@ -163,11 +167,7 @@
         function togglePassword() {
             if (passwordInput.type === "password") {
                 passwordInput.type = "text";
-                // We need to re-render the icon, but easier to just swap the attribute in Vanilla JS
-                // Since Lucide replaces the <i> tag with an <svg>, we find the svg and replace it or just toggle classes.
-                // Simpler approach for vanilla: Remove the old SVG and append the new one.
-                
-                const parent = eyeIcon.parentElement;
+                const parent = document.getElementById('eye-icon').parentElement;
                 parent.innerHTML = '<i data-lucide="eye-off" class="w-5 h-5" id="eye-icon"></i>';
                 lucide.createIcons();
             } else {

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodIQ - NGO Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body{font-family:'Inter',sans-serif;} 
+        .card-anim{animation: slideUp 0.4s ease-out forwards; opacity:0;} 
+        @keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+    </style>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { brand: { green: '#10b981' } } } } }
+    </script>
+</head>
+<body class="bg-slate-50 min-h-screen flex">
+
+    <aside class="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col p-6">
+        <div class="flex items-center gap-3 mb-10">
+            <div class="bg-brand-green text-white p-2 rounded-xl"><i data-lucide="heart-handshake"></i></div>
+            <span class="font-black text-xl text-slate-800">FoodIQ</span>
+        </div>
+        <nav class="space-y-2">
+            <a href="#" class="flex items-center gap-3 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm">
+                <i data-lucide="layout-grid" class="w-5 h-5"></i> Live Feed
+            </a>
+            <div class="px-4 py-2 text-xs text-slate-400 font-bold uppercase mt-6">System</div>
+            <div class="px-4 py-1 text-xs text-slate-500">Connected to: 127.0.0.1:5000</div>
+        </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+        <header class="h-20 border-b border-slate-200 bg-white/80 backdrop-blur flex items-center justify-between px-8">
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <h2 class="font-bold text-slate-700">Live Wastage Feed</h2>
+            </div>
+            <button onclick="refreshFeed()" class="p-2 hover:bg-slate-100 rounded-full transition" title="Force Refresh">
+                <i data-lucide="refresh-cw" class="w-5 h-5 text-slate-500"></i>
+            </button>
+        </header>
+
+        <div id="feed-container" class="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 content-start">
+            <div class="col-span-full text-center py-20 text-slate-400">
+                <i data-lucide="loader-2" class="w-10 h-10 animate-spin mx-auto mb-4"></i>
+                <p>Connecting to backend...</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API = 'http://127.0.0.1:5000/api';
+
+        async function init() {
+            lucide.createIcons();
+            refreshFeed();
+            // Auto-refresh every 3 seconds to catch urgent updates fast
+            setInterval(refreshFeed, 3000); 
+        }
+
+        async function refreshFeed() {
+            try {
+                // Fetch from Python Backend
+                const res = await fetch(`${API}/ngo/feed?lat=19.1&lng=72.8`);
+                if(!res.ok) throw new Error("Server Offline");
+                
+                const data = await res.json();
+                renderFeed(data);
+            } catch (e) {
+                console.error("Connection Error", e);
+                document.getElementById('feed-container').innerHTML = `
+                <div class="col-span-full text-center py-20 text-red-400">
+                    <i data-lucide="wifi-off" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+                    <p>Cannot connect to server (Ensure python app.py is running)</p>
+                </div>`;
+                lucide.createIcons();
+            }
+        }
+
+        function renderFeed(items) {
+            const container = document.getElementById('feed-container');
+            
+            if(items.length === 0) {
+                container.innerHTML = `<div class="col-span-full text-center py-20 text-slate-400"><i data-lucide="coffee" class="w-10 h-10 mx-auto mb-2 opacity-50"></i><p>No surplus food available right now.</p></div>`;
+                lucide.createIcons();
+                return;
+            }
+
+            // Generate HTML for cards
+            container.innerHTML = items.map((item, idx) => {
+                // Check if the item is marked URGENT by the backend logic
+                const isUrgent = item.is_urgent; 
+                
+                // Styling logic based on urgency
+                const borderClass = isUrgent ? 'border-red-500 ring-4 ring-red-500/10' : 'border-slate-200';
+                const badge = isUrgent ? `<span class="absolute top-4 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg animate-pulse">URGENT</span>` : '';
+                const btnClass = isUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-brand-green';
+
+                return `
+                <div class="card-anim bg-white p-6 rounded-2xl border ${borderClass} shadow-sm hover:shadow-xl transition-all relative group" style="animation-delay: ${idx * 0.1}s">
+                    ${badge}
+                    <div class="mb-4">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Food Item</span>
+                        <h3 class="text-xl font-black text-slate-800">${item.item_name}</h3>
+                        <p class="text-xs text-slate-500 mt-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> Mithibai College</p>
+                    </div>
+                    
+                    <div class="flex justify-between items-end border-t border-slate-100 pt-4 mt-4">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quantity</span>
+                            <p class="text-2xl font-black text-slate-800">${item.qty_kg} <span class="text-sm text-slate-400 font-medium">kg</span></p>
+                        </div>
+                        <button onclick="claimItem(${item.id})" class="${btnClass} text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-lg shadow-slate-900/20">
+                            CLAIM
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        async function claimItem(id) {
+            if(!confirm("Confirm pickup for this item?")) return;
+            
+            try {
+                const res = await fetch(`${API}/ngo/claim`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    alert(`✅ SUCCESS! \n\nPickup Code: ${data.pickup_code}`);
+                    refreshFeed(); // Immediate refresh to remove the item
+                } else {
+                    alert("❌ " + data.message);
+                }
+            } catch(e) { alert("Connection Error"); }
+        }
+
+        init();
+    </script>
+</body>
+</html>

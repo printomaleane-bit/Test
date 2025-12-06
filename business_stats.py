@@ -1,0 +1,177 @@
+import sqlite3
+from datetime import datetime, date
+from collections import defaultdict
+from statistics import mean
+from typing import List, Dict, Any, Optional
+
+# ---- date helper ----
+def _ensure_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(value.strip(), fmt).date()
+            except Exception:
+                pass
+    # try numeric epoch (seconds)
+    try:
+        iv = int(value)
+        return datetime.utcfromtimestamp(iv).date()
+    except Exception:
+        pass
+    return None
+
+# ---- DB loaders ----
+def load_transactions_from_db(db_path: str) -> List[Dict[str, Any]]:
+    """
+    Expected (recommended) transactions table columns:
+      id, date, item, category, price, cost, customer
+    Returns list of dicts with keys: date (date object), item, category, price, cost, customer
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    # check columns present
+    cur.execute("PRAGMA table_info(transactions)")
+    cols = [r["name"] for r in cur.fetchall()]
+
+    required = ["date", "item", "category", "price", "cost", "customer"]
+    select_cols = [(c if c in cols else f"NULL as {c}") for c in required]
+
+    q = f"SELECT {', '.join(select_cols)} FROM transactions ORDER BY date ASC"
+    rows = []
+    try:
+        for r in cur.execute(q):
+            raw_date = r["date"]
+            d = _ensure_date(raw_date)
+            if d is None:
+                # skip unparsable dates (matches previous CSV behavior)
+                continue
+            try:
+                price = float(r["price"] or 0)
+            except Exception:
+                price = 0.0
+            try:
+                cost = float(r["cost"] or 0)
+            except Exception:
+                cost = 0.0
+
+            rows.append({
+                "date": d,
+                "item": (r["item"] or "").strip() if r["item"] is not None else "",
+                "category": (r["category"] or "Uncategorized").strip() if r["category"] is not None else "Uncategorized",
+                "price": price,
+                "cost": cost,
+                "customer": (r["customer"] or "Anonymous").strip() if r["customer"] is not None else "Anonymous"
+            })
+    finally:
+        conn.close()
+
+    return rows
+
+
+def load_expenses_from_db(db_path: str) -> List[Dict[str, Any]]:
+    """
+    Expected (optional) expenses table: id, date, expense
+    """
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    # if table missing or malformed, return empty list
+    try:
+        cur.execute("PRAGMA table_info(expenses)")
+        cols = [r["name"] for r in cur.fetchall()]
+        if not cols:
+            conn.close()
+            return []
+        select_cols = [(c if c in cols else f"NULL as {c}") for c in ("date", "expense")]
+        q = f"SELECT {', '.join(select_cols)} FROM expenses ORDER BY date ASC"
+        rows = []
+        for r in cur.execute(q):
+            d = _ensure_date(r["date"])
+            if d is None:
+                continue
+            try:
+                expense = float(r["expense"] or 0)
+            except Exception:
+                expense = 0.0
+            rows.append({"date": d, "expense": expense})
+        conn.close()
+        return rows
+    except Exception:
+        conn.close()
+        return []
+
+
+# ---- computation (returns JSON-serializable primitives) ----
+def compute_business_stats(transactions: List[Dict[str, Any]], expenses: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    if expenses is None:
+        expenses = []
+
+    total_revenue = sum(t["price"] for t in transactions)
+    total_cost = sum(t["cost"] for t in transactions)
+    total_expenses = sum(e.get("expense", 0) for e in expenses)
+
+    net_profit = total_revenue - total_cost - total_expenses
+    profit_margin = (net_profit / total_revenue * 100) if total_revenue else 0.0
+    avg_order_value = mean([t["price"] for t in transactions]) if transactions else 0.0
+
+    # revenue over time (monthly)
+    monthly = defaultdict(float)
+    for t in transactions:
+        key = t["date"].strftime("%Y-%m")
+        monthly[key] += t["price"]
+    period_labels = sorted(monthly.keys())
+    period_values = [monthly[k] for k in period_labels]
+
+    # revenue by category
+    revenue_by_category = defaultdict(float)
+    for t in transactions:
+        revenue_by_category[t["category"]] += t["price"]
+
+    # top products by profit
+    product_map = defaultdict(lambda: {"rev": 0.0, "cost": 0.0})
+    for t in transactions:
+        product_map[t["item"]]["rev"] += t["price"]
+        product_map[t["item"]]["cost"] += t["cost"]
+
+    top_products = []
+    for name, d in product_map.items():
+        rev = d["rev"]
+        cost = d["cost"]
+        profit = rev - cost
+        margin = (profit / rev * 100) if rev else 0.0
+        top_products.append({
+            "name": name,
+            "revenue": rev,
+            "profit": profit,
+            "margin": margin
+        })
+    top_products = sorted(top_products, key=lambda x: x["profit"], reverse=True)[:20]
+
+    # top customers by spend
+    customer_map = defaultdict(float)
+    for t in transactions:
+        customer_map[t["customer"]] += t["price"]
+    top_customers = [{"name": n, "spend": s} for n, s in customer_map.items()]
+    top_customers = sorted(top_customers, key=lambda x: x["spend"], reverse=True)[:12]
+
+    return {
+        "total_revenue": total_revenue,
+        "total_expenses": total_expenses,
+        "net_profit": net_profit,
+        "profit_margin": profit_margin,
+        "avg_order_value": avg_order_value,
+        "period_labels": period_labels,
+        "period_values": period_values,
+        "revenue_by_category": dict(revenue_by_category),
+        "top_products": top_products,
+        "top_customers": top_customers
+    }
